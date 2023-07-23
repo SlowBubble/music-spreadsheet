@@ -15,6 +15,7 @@ export const codeToHotkey: Map<string, string> = new Map([
   ["End", "end"],
   ["PageUp", "pageup"],
   ["PageDown", "pagedown"],
+  ["Space", "space"],
 
   // Numeric
   ["Digit1", "1"],

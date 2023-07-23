@@ -9,6 +9,7 @@ export class TsUi extends HTMLElement {
     const textarea: HTMLTextAreaElement = <HTMLTextAreaElement>document.createElement('textarea');
     textarea.id = 'editing-textarea';
     textarea.style.width = '100%';
+    textarea.style.fontSize = '24px';
     textarea.rows = 20;
     textarea.spellcheck = false;
     textarea.autofocus = true;

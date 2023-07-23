@@ -1,10 +1,10 @@
 import { Cell } from "./cell";
 
-const COLUMN_DELIMITER = ' | ';
-const ROW_DELIMITER = '\n';
+export const COLUMN_DELIMITER = ' | ';
+export const ROW_DELIMITER = '\n';
 
 export class TextTable {
-  constructor(public cells: Cell[][] = [[new Cell('')]], public columnDelimiter = COLUMN_DELIMITER) {
+  constructor(public cells: Cell[][] = [[new Cell()]], public columnDelimiter = COLUMN_DELIMITER) {
   }
   static fromString(str: string, columnDelimiter = COLUMN_DELIMITER): TextTable {
     return new TextTable(stringToCells(str), columnDelimiter);
