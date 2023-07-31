@@ -10,7 +10,7 @@ export class TsUi extends HTMLElement {
     textarea.id = 'editing-textarea';
     textarea.style.width = '100%';
     textarea.style.fontSize = '24px';
-    textarea.rows = 20;
+    textarea.rows = 15;
     textarea.spellcheck = false;
     textarea.autofocus = true;
     shadowRoot.appendChild(textarea);

@@ -38,6 +38,7 @@ export class TsEditor {
       public textTable = new TextTable(),
       public cursor = new TsCursor(),
       public keydownHandler: KeydownHandler | undefined = undefined,
+      public onRenderHandler: Function | undefined = undefined,
   ) {
     this.textarea.onkeydown = evt => this.handleTextareaKeydown(evt)
     this.textarea.onclick = evt => {
@@ -45,11 +46,18 @@ export class TsEditor {
     }
   }
 
+  onRender(onRenderHandler: Function) {
+    this.onRenderHandler = onRenderHandler;
+  }
+
   render() {
-    console.log('lint + update cursor')
+    // console.log('lint + update cursor')
     this.textTable.applyLint();
     this.textarea.value = this.textTable.toString();
     this.updateTextareaSelectionFromCursors();
+    if (this.onRenderHandler) {
+      this.onRenderHandler();
+    }
   }
 
   updateTextareaSelectionFromCursors() {
@@ -64,7 +72,12 @@ export class TsEditor {
   }
 
   handleTextareaKeydown(evt: KeyboardEvent) {
-    const handleKeyDown = this.keydownHandler ? this.keydownHandler : this.defaultKeydownHandler;
+    const handleKeyDown = (evt: KeyboardEvent) => {
+      if (this.keydownHandler) {
+        return this.keydownHandler(evt);
+      }
+      return this.defaultKeydownHandler(evt);
+    }
     const handlerOutput = handleKeyDown(evt);
     if (!handlerOutput.applyBrowserDefault) {
       evt.preventDefault();
@@ -164,7 +177,7 @@ export class TsEditor {
       this.cursor.textIdx = resultingSubstr.length;
       return true;
     }
-    if (currCell.text.trimEnd().length > 0) {
+    if (!currCell.isEmpty()) {
       currCell.text = '';
       return true;
     }

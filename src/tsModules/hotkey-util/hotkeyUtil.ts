@@ -47,7 +47,7 @@ function evtToHotkeyInfo(evt: KeyboardEvent) {
   const info = new HotkeyInfo();
   const possHotkey = codeToHotkey.get(evt.code);
   if (!possHotkey) {
-    throw new Error(`Unknown endKey for evtcode: ${evt.code}`);
+    throw new Error(`(Unknown evt code. Please add this to hotKeyUtil mapping: ${evt.code}`);
   }
   info.endKey = possHotkey;
   info.metaKey = evt.metaKey;

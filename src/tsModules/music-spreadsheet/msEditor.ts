@@ -1,11 +1,19 @@
 import { evtIsHotkey, evtIsLikelyInput } from "../hotkey-util/hotkeyUtil";
+import { getTextIdxOnTheLeft, getTextIdxOnTheRight } from "../textarea-spreadsheet/textUtil";
 import { KeydownHandlerOutput, TsEditor, shouldApplyBrowserDefaultWithoutRerendering, shouldPreventDefaultWithoutRerendering, shouldRerenderAndPreventDefault } from "../textarea-spreadsheet/tsEditor";
+import { mapKeyToNoteNum } from "./keyToNoteNumMapping";
+import { noteNumToAbc } from "./noteNumToAbcMapping";
 
 export class MsEditor {
   protected buffer: KeyboardEvent[] = [];
   
-  constructor(public tsEditor: TsEditor, public numFullBarsPerRow = 4) {
-    this.tsEditor.onKeydown(evt => this.handleKeyDown(evt));
+  constructor(public tsEditor: TsEditor, public magicMode = true, public numFullBarsPerRow = 4) {
+    this.tsEditor.onKeydown(evt => {
+      if (this.magicMode) {
+        return this.handleKeyDown(evt);
+      }
+      return this.tsEditor.defaultKeydownHandler(evt);
+    });
   }
 
   handleKeyDown(evt: KeyboardEvent): KeydownHandlerOutput {
@@ -23,7 +31,8 @@ export class MsEditor {
       });
       let rerender = false;
       this.buffer.forEach(evt => {
-        rerender = rerender || this.handleKeyDownAfterOrdering(evt);
+        const shouldRerender = this.handleKeyDownAfterOrdering(evt);
+        rerender ||= shouldRerender;
       });
       this.buffer = [];
       if (rerender) {
@@ -43,6 +52,13 @@ export class MsEditor {
   // Returns whether or not to re-render.
   handleKeyDownAfterOrdering(evt: KeyboardEvent): boolean {
     if (evtIsHotkey(evt, '`')) {
+      const numDividersInCell = (this.tsEditor.getCurrCell().text.match(/;/g) || []).length;
+      // TODO Use meterDenom - 1 instead of 3.
+      const hasEnoughDividers = numDividersInCell === 3;
+      if (hasEnoughDividers) {
+        this.handleTab();
+        return true;
+      }
       this.addDivider();
       return true;
     }
@@ -59,26 +75,98 @@ export class MsEditor {
       }
     }
     if (evtIsHotkey(evt, 'tab')) {
-      if (this.tsEditor.cursor.colIdx < this.numFullBarsPerRow) {
-        this.tsEditor.moveToRightCell();
-        return true;
-      }
-      this.tsEditor.moveDownToLeftmostColumn();
-      // Move right before the left-most cell is the pick-up bar.
-      this.tsEditor.moveToRightCell();
+      this.handleTab();
       return true;
     }
     if (evtIsHotkey(evt, 'backspace')) {
       const hasChanged = this.tsEditor.removeTextOrMoveBack(true);
       if (!hasChanged) {
-        this.moveLeftOrUpAndRight();
+        this.moveLeftOrUpRightWhereTextExists(true);
       };
+      return true;
+    }
+    if (evtIsHotkey(evt, 'left')) {
+      this.handleLeft();
+      return true;
+    }
+    if (evtIsHotkey(evt, 'right')) {
+      this.handleRight();
+      return true;
     }
     return false;
   }
 
-  customMoveLeftOrUpAndRight(removeCurrCellIfNoCellToRight=false) {
-
+  // Move left if there is text in any cells in the left.
+  // Otherwise, move up one row to the right-most cell with content
+  moveLeftOrUpRightWhereTextExists(removeCurrCellIfNonEssential=false) {
+    const oldRowIdx = this.tsEditor.cursor.rowIdx;
+    const oldColIdx = this.tsEditor.cursor.colIdx;
+    const currRow = this.tsEditor.textTable.cells[oldRowIdx];
+    const textExistsInTheLeft = currRow.slice(0, oldColIdx).some(cell => !cell.isEmpty());
+    if (oldColIdx > 1 || textExistsInTheLeft) {
+      this.tsEditor.moveToLeftCell();
+      if (removeCurrCellIfNonEssential) {
+        // Remove the cells to the right of the cursor.
+        const hasThingsToTheRight = currRow.slice(oldColIdx).some(cell => !cell.isEmpty());
+        if (!hasThingsToTheRight) {
+          this.tsEditor.textTable.cells[oldRowIdx] = currRow.slice(0, oldColIdx);
+        }
+      }
+      return;
+    }
+    if (this.tsEditor.cursor.rowIdx === 0) {
+      return;
+    }
+    this.tsEditor.cursor.rowIdx -= 1;
+    if (removeCurrCellIfNonEssential) {
+      // Remove the entire row if nothing is below it.
+      const rowsBelow =this.tsEditor.textTable.cells.slice(oldRowIdx);
+      const hasStuffBelow =rowsBelow.some(row => row.some(cell => !cell.isEmpty()));
+      console.log(rowsBelow);
+      console.log(hasStuffBelow)
+      if (!hasStuffBelow) {
+        this.tsEditor.textTable.cells = this.tsEditor.textTable.cells.slice(0, oldRowIdx);
+      }
+    }
+    this.tsEditor.cursor.colIdx = this.numFullBarsPerRow;
+    // const newRow = this.tsEditor.textTable.cells[this.tsEditor.cursor.rowIdx];
+    // for (let idx = newRow.length - 1; idx >= 0; idx--) {
+    //   if (!newRow[idx].isEmpty()) {
+    //     this.tsEditor.cursor.colIdx = idx;
+    //     return;
+    //   }
+    // }
+    // this.tsEditor.cursor.colIdx = 0;
+  }
+  
+  handleLeft() {
+    if (this.tsEditor.cursor.inTextMode && this.tsEditor.cursor.textIdx > 0) {
+      this.tsEditor.cursor.textIdx = getTextIdxOnTheLeft(
+        this.tsEditor.getCurrCell().text, this.tsEditor.cursor.textIdx);;
+      return;
+    }
+    this.tsEditor.moveToLeftCell();
+  }
+  handleRight() {
+    const text = this.tsEditor.getCurrCell().text;
+    if (this.tsEditor.cursor.inTextMode && this.tsEditor.cursor.textIdx < text.length) {
+      this.tsEditor.cursor.textIdx = getTextIdxOnTheRight(
+        text, this.tsEditor.cursor.textIdx);
+      return;
+    }
+    if (this.tsEditor.cursor.colIdx === this.numFullBarsPerRow) {
+      return;
+    }
+    this.tsEditor.moveToRightCell();
+  }
+  handleTab() {
+    if (this.tsEditor.cursor.colIdx < this.numFullBarsPerRow) {
+      this.tsEditor.moveToRightCell();
+      return;
+    }
+    this.tsEditor.moveDownToLeftmostColumn();
+    // Move right before the left-most cell is the pick-up bar.
+    this.tsEditor.moveToRightCell();
   }
   addDivider() {
     this.handleTextInputWithPadding(';');
@@ -97,49 +185,5 @@ export class MsEditor {
     }
     this.tsEditor.handleTextInput(paddedText);
   }
-  
-}
 
-const keyToNoteNum: Map<string, number> = new Map([
-  ['1', 60],
-  ['2', 62],
-  ['3', 64],
-  ['4', 65],
-  ['5', 67],
-  ['6', 69],
-  ['7', 71],
-  ['8', 72],
-  ['9', 74],
-  ['0', 76],
-]);
-
-function mapKeyToNoteNum(key: string) {
-  return keyToNoteNum.get(key);
-}
-
-const modNoteNumToAbc = new Map([
-  [0, 'C'],
-  [1, 'C#'],
-  [2, 'D'],
-  [3, 'Eb'],
-  [4, 'E'],
-  [5, 'F'],
-  [6, 'F#'],
-  [7, 'G'],
-  [8, 'G#'],
-  [9, 'A'],
-  [10, 'Bb'],
-  [11, 'B'],
-]);
-
-function noteNumToAbc(noteNum: number): string {
-  const possibleStr = modNoteNumToAbc.get(mod(noteNum, 12));
-  if (!possibleStr) {
-    throw new Error('Invalid noteNum: ' + noteNum);
-  }
-  return possibleStr;
-}
-
-function mod(a: number, b: number) {
-  return (a % b + b) % b;
 }
